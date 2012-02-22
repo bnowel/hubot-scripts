@@ -26,3 +26,8 @@ Additionally, it's extremely helpful to add [TomDoc](http://tomdoc.org) to the
 top of each file. (Check out [an example](https://github.com/github/hubot-scripts/blob/master/src/scripts/speak.coffee#L1-5)).
 We'll pull out the commands from those lines and display them in the generic,
 robot-wide `hubot help` command.
+
+## Discovering
+
+[The Script Catalog](http://hubot-script-catalog.herokuapp.com/)
+

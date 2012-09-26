@@ -1,24 +1,31 @@
-# Show open issues from a Github repository.
+# Description:
+#   Show open issues from a Github repository
 #
-# You need to set the following variable:
-#   HUBOT_GITHUB_TOKEN = "<oauth token>"
+# Dependencies:
+#   "underscore": "1.3.3"
+#   "underscore.string": "2.1.1"
+#   "githubot": "0.2.0"
 #
-# You may optionally set the following variables:
-#   HUBOT_GITHUB_USER = "<default user/org name>"
-#   HUBOT_GITHUB_REPO = "<default repo>"
-#   HUBOT_GITHUB_USER_(.*) = "<GitHub username for matching chat handle>"
+# Configuration:
+#   HUBOT_GITHUB_TOKEN
+#   HUBOT_GITHUB_USER
+#   HUBOT_GITHUB_REPO
+#   HUBOT_GITHUB_USER_(.*)
 #
-# If HUBOT_GITHUB_USER is set, you can ask `show me issues for hubot` instead
-# of `show me issues for github/hubot`.
+# Commands:
+#   hubot show [me] [<limit> [of]] [<assignee>'s|my] [<label>] issues [for <user/repo>] [about <query>] -- Shows open GitHub issues for repo.
+#   hubot show [me] issues for <repo> -- List all issues for given repo IFF HUBOT_GITHUB_USER configured
+#   hubot show [me] issues for <user/repo> -- List all issues for given repo
+#   hubot show [me] issues -- Lists all issues IFF HUBOT_GITHUB_REPO configured
+#   hubot show <chat user's> issues -- Lists all issues for chat user IFF HUBOT_GITHUB_USER_(.*) configured
 #
-# If HUBOT_GITHUB_REPO is set, you can ask `show me issues` instead of `show
-# me issues for github/hubot`.
+# Notes:
+#   If, for example, HUBOT_GITHUB_USER_JOHN is set to GitHub user login
+#   'johndoe1', you can ask `show john's issues` instead of `show johndoe1's
+#   issues`. This is useful for mapping chat handles to GitHub logins.
 #
-# If, for example, HUBOT_GITHUB_USER_JOHN is set to GitHub user login
-# 'johndoe1', you can ask `show john's issues` instead of `show johndoe1's
-# issues`. This is useful for mapping chat handles to GitHub logins.
-#
-# show [me] [<limit> [of]] [<assignee>'s|my] [<label>] issues [for <user/repo>] [about <query>] -- Shows open GitHub issues for repo.
+# Author:
+#   davidsiegel
 
 _  = require("underscore")
 _s = require("underscore.string")
@@ -63,40 +70,26 @@ complete_assignee = (msg, name) ->
   resolve = (n) -> process.env["HUBOT_GITHUB_USER_#{n.replace(/\s/g, '_').toUpperCase()}"]
   resolve(name) or resolve(name.split(' ')[0]) or name
 
-# Resolve repo to a qualified GitHub repo using environment variables.
-complete_repo = (repo) ->
-  repo = process.env.HUBOT_GITHUB_REPO unless repo?
-  repo = "#{process.env.HUBOT_GITHUB_USER}/#{repo}" unless _s.include repo, "/"
-  repo
-
 module.exports = (robot) ->
+  github = require("githubot")(robot)
   robot.respond ASK_REGEX, (msg) ->
     criteria = parse_criteria msg.message.text
-    criteria.repo = complete_repo criteria.repo
+    criteria.repo = github.qualified_repo criteria.repo
     criteria.assignee = complete_assignee msg, criteria.assignee if criteria.assignee?
 
     query_params = state: "open", sort: "created"
     query_params.labels = criteria.label if criteria.label?
     query_params.assignee = criteria.assignee if criteria.assignee?
 
-    oauth_token = process.env.HUBOT_GITHUB_TOKEN
-    msg.http("https://api.github.com/repos/#{criteria.repo}/issues")
-      .headers(Authorization: "token #{oauth_token}", Accept: "application/json")
-      .query(query_params)
-      .get() (err, res, body) ->
-        if err
-          msg.send "GitHub says: #{err}"
-          return
+    github.get "https://api.github.com/repos/#{criteria.repo}/issues", query_params, (issues) ->
+      issues = filter_issues issues, criteria
 
-        issues = JSON.parse(body)
-        issues = filter_issues issues, criteria
-       
-        if _.isEmpty issues
-            msg.send "No issues found."
-        else
-          for issue in issues
-            labels = ("##{label.name}" for label in issue.labels).join(" ")
-            assignee = if issue.assignee then " (#{issue.assignee.login})" else ""
-            msg.send "[#{issue.number}] #{issue.title} #{labels}#{assignee} = #{issue.html_url}"
+      if _.isEmpty issues
+          msg.send "No issues found."
+      else
+        for issue in issues
+          labels = ("##{label.name}" for label in issue.labels).join(" ")
+          assignee = if issue.assignee then " (#{issue.assignee.login})" else ""
+          msg.send "[#{issue.number}] #{issue.title} #{labels}#{assignee} = #{issue.html_url}"
 
 # require('../../test/scripts/github-issues_test').test parse_criteria
